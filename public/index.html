@@ -13,6 +13,7 @@ const config = {
   type: Phaser.AUTO,
   width: 1280,
   height: 720,
+  backgroundColor: "#0f0f1a",
   physics: {
     default: 'matter',
     matter: {
@@ -28,29 +29,39 @@ const game = new Phaser.Game(config);
 
 function create() {
 
-  // Create pegs
+  // Draw pegs
   for (let row = 0; row < 8; row++) {
     for (let col = 0; col < 10; col++) {
+
       let x = 200 + col * 80 + (row % 2 === 0 ? 0 : 40);
       let y = 150 + row * 60;
 
-      this.matter.add.circle(x, y, 6, {
-        isStatic: true
-      });
+      // Physics body
+      this.matter.add.circle(x, y, 6, { isStatic: true });
+
+      // Visible circle
+      let peg = this.add.circle(x, y, 6, 0x00ffff);
+      peg.setDepth(1);
     }
   }
 
   // Floor
-  this.matter.add.rectangle(640, 700, 1200, 40, {
-    isStatic: true
-  });
+  this.matter.add.rectangle(640, 700, 1200, 40, { isStatic: true });
+  this.add.rectangle(640, 700, 1200, 40, 0x222244);
 
   socket.on("drop", (data) => {
-    const ball = this.matter.add.circle(640, 50, 12, {
+
+    let ball = this.matter.add.circle(640, 50, 12, {
       restitution: 0.9
     });
 
-    ball.setFillStyle(0x00ffff);
+    let graphics = this.add.circle(640, 50, 12, 0xff00ff);
+
+    // Sync visual with physics
+    this.events.on("update", () => {
+      graphics.x = ball.position.x;
+      graphics.y = ball.position.y;
+    });
   });
 }
 </script>
