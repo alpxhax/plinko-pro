@@ -11,19 +11,21 @@
 <script>
 const socket = io();
 
-const WIDTH = 1280;
-const HEIGHT = 720;
+const WIDTH = window.innerWidth;
+const HEIGHT = window.innerHeight;
 
-const ROWS = 9;                  // change difficulty here
+const ROWS = 9;
 const PEG_SPACING = 70;
+const ROW_HEIGHT = 75;
 const PEG_RADIUS = 6;
 const BALL_RADIUS = 10;
 
-const START_Y = 120;
 const CENTER_X = WIDTH / 2;
+const START_Y = 140;
 
-const multipliers = [0, 0.5, 1, 2, 5, 10, 5, 2, 1, 0.5]; 
-// rows + 1 slots
+let score = 1000;
+
+const multipliers = [0, 0.5, 1, 2, 5, 10, 5, 2, 1, 0.5];
 
 const config = {
   type: Phaser.AUTO,
@@ -33,13 +35,10 @@ const config = {
   physics: {
     default: "matter",
     matter: {
-      gravity: { y: 1.2 },
-      restitution: 0.9
+      gravity: { y: 1.3 }
     }
   },
-  scene: {
-    create: create
-  }
+  scene: { create, update }
 };
 
 new Phaser.Game(config);
@@ -48,90 +47,117 @@ function create() {
 
   const scene = this;
 
-  // ---------- SIDE WALLS ----------
-  scene.matter.add.rectangle(150, HEIGHT/2, 20, HEIGHT, { isStatic: true });
-  scene.matter.add.rectangle(WIDTH-150, HEIGHT/2, 20, HEIGHT, { isStatic: true });
+  scene.cameras.main.setBackgroundColor("#0f0f1a");
 
-  scene.add.rectangle(150, HEIGHT/2, 20, HEIGHT, 0x222244);
-  scene.add.rectangle(WIDTH-150, HEIGHT/2, 20, HEIGHT, 0x222244);
+  // ----- SCORE UI -----
+  const scoreText = scene.add.text(30, 30, "Score: " + score, {
+    font: "28px Arial",
+    fill: "#00ffcc"
+  });
 
-  // ---------- TRIANGLE PEG BOARD ----------
+  // ----- SIDE WALLS -----
+  const boardWidth = ROWS * PEG_SPACING;
+
+  const leftWallX = CENTER_X - boardWidth/2 - 40;
+  const rightWallX = CENTER_X + boardWidth/2 + 40;
+
+  scene.matter.add.rectangle(leftWallX, HEIGHT/2, 20, HEIGHT, { isStatic: true });
+  scene.matter.add.rectangle(rightWallX, HEIGHT/2, 20, HEIGHT, { isStatic: true });
+
+  scene.add.rectangle(leftWallX, HEIGHT/2, 20, HEIGHT, 0x222244);
+  scene.add.rectangle(rightWallX, HEIGHT/2, 20, HEIGHT, 0x222244);
+
+  // ----- PEGS (REAL TRIANGLE) -----
   for (let row = 0; row < ROWS; row++) {
 
     let pegsInRow = row + 1;
+    let totalWidth = (pegsInRow - 1) * PEG_SPACING;
+    let startX = CENTER_X - totalWidth / 2;
 
     for (let col = 0; col < pegsInRow; col++) {
 
-      let totalWidth = (pegsInRow - 1) * PEG_SPACING;
-      let startX = CENTER_X - totalWidth / 2;
-
       let x = startX + col * PEG_SPACING;
-      let y = START_Y + row * 60;
+      let y = START_Y + row * ROW_HEIGHT;
 
       scene.matter.add.circle(x, y, PEG_RADIUS, { isStatic: true });
-
       scene.add.circle(x, y, PEG_RADIUS, 0x00ffff);
     }
   }
 
-  // ---------- FLOOR ----------
-  scene.matter.add.rectangle(WIDTH/2, 690, WIDTH-300, 40, { isStatic: true });
-  scene.add.rectangle(WIDTH/2, 690, WIDTH-300, 40, 0x222244);
+  // ----- FLOOR (LOWERED SO NO OVERLAP) -----
+  const floorY = START_Y + ROWS * ROW_HEIGHT + 80;
 
-  // ---------- SLOT DIVIDERS ----------
-  const slotWidth = (PEG_SPACING);
-  const slotCount = ROWS + 1;
+  scene.matter.add.rectangle(CENTER_X, floorY, boardWidth + 80, 40, { isStatic: true });
+  scene.add.rectangle(CENTER_X, floorY, boardWidth + 80, 40, 0x222244);
 
-  let bottomWidth = ROWS * PEG_SPACING;
-  let startSlotsX = CENTER_X - bottomWidth / 2 - slotWidth/2;
+  // ----- SLOT DIVIDERS -----
+  const slotWidth = PEG_SPACING;
+  const startSlotsX = CENTER_X - boardWidth/2 - slotWidth/2;
 
-  for (let i = 0; i <= slotCount; i++) {
+  for (let i = 0; i <= ROWS; i++) {
 
     let x = startSlotsX + i * slotWidth;
 
-    scene.matter.add.rectangle(x, 650, 5, 120, { isStatic: true });
-    scene.add.rectangle(x, 650, 5, 120, 0x444466);
+    scene.matter.add.rectangle(x, floorY - 40, 5, 100, { isStatic: true });
+    scene.add.rectangle(x, floorY - 40, 5, 100, 0x444466);
   }
 
-  // ---------- MULTIPLIER TEXT ----------
+  // ----- MULTIPLIER TEXT -----
   for (let i = 0; i < multipliers.length; i++) {
 
     let x = startSlotsX + i * slotWidth + slotWidth/2;
 
-    scene.add.text(x - 15, 680, multipliers[i] + "x", {
-      font: "20px Arial",
+    scene.add.text(x - 20, floorY + 10, multipliers[i] + "x", {
+      font: "22px Arial",
       fill: "#ffffff"
     });
   }
 
-  // ---------- DROP EVENT ----------
-  socket.on("drop", () => {
+  // ----- DROP BALL FUNCTION -----
+  function dropBall() {
 
-    let bet = 10;
+    if (score < 10) return;
 
-    let ball = scene.matter.add.circle(CENTER_X, 60, BALL_RADIUS, {
+    score -= 10;
+    scoreText.setText("Score: " + score);
+
+    const ball = scene.matter.add.circle(CENTER_X, 60, BALL_RADIUS, {
       restitution: 0.9
     });
 
-    let visual = scene.add.circle(CENTER_X, 60, BALL_RADIUS, 0xff00ff);
+    const visual = scene.add.circle(CENTER_X, 60, BALL_RADIUS, 0xff00ff);
 
     scene.events.on("update", function updateBall() {
 
       visual.x = ball.position.x;
       visual.y = ball.position.y;
 
-      if (ball.position.y > 660) {
+      if (ball.position.y > floorY - 50) {
 
         let slotIndex = Math.floor((ball.position.x - startSlotsX) / slotWidth);
 
         if (slotIndex >= 0 && slotIndex < multipliers.length) {
 
-          let win = bet * multipliers[slotIndex];
+          let win = 10 * multipliers[slotIndex];
+          score += win;
+          scoreText.setText("Score: " + score);
 
-          scene.add.text(ball.position.x - 30, 600, "WIN " + win, {
-            font: "28px Arial",
-            fill: "#00ff00"
+          // floating win text
+          const winText = scene.add.text(ball.position.x - 30, ball.position.y - 40,
+            "+" + win, { font: "28px Arial", fill: "#00ff00" });
+
+          scene.tweens.add({
+            targets: winText,
+            y: winText.y - 50,
+            alpha: 0,
+            duration: 800,
+            onComplete: () => winText.destroy()
           });
+
+          // screen shake for big wins
+          if (multipliers[slotIndex] >= 5) {
+            scene.cameras.main.shake(300, 0.01);
+          }
         }
 
         ball.destroy();
@@ -139,8 +165,16 @@ function create() {
         scene.events.off("update", updateBall);
       }
     });
-  });
+  }
+
+  // Click anywhere to drop
+  scene.input.on("pointerdown", dropBall);
+
+  // Also support socket drop
+  socket.on("drop", dropBall);
 }
+
+function update() {}
 </script>
 
 </body>
