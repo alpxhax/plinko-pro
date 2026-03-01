@@ -5,17 +5,19 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
 </head>
-<body style="margin:0;background:#0f0f1a;">
+<body style="margin:0;background:#0f0f1a;overflow:hidden;">
 <script>
 const socket = io();
 
 const config = {
   type: Phaser.AUTO,
-  width: 1920,
-  height: 1080,
+  width: 1280,
+  height: 720,
   physics: {
     default: 'matter',
-    matter: { gravity: { y: 1 } }
+    matter: {
+      gravity: { y: 1 }
+    }
   },
   scene: {
     create: create
@@ -25,10 +27,31 @@ const config = {
 const game = new Phaser.Game(config);
 
 function create() {
-    socket.on("drop", (data) => {
-        const ball = this.matter.add.circle(960, 50, 10);
-        ball.setBounce(0.9);
+
+  // Create pegs
+  for (let row = 0; row < 8; row++) {
+    for (let col = 0; col < 10; col++) {
+      let x = 200 + col * 80 + (row % 2 === 0 ? 0 : 40);
+      let y = 150 + row * 60;
+
+      this.matter.add.circle(x, y, 6, {
+        isStatic: true
+      });
+    }
+  }
+
+  // Floor
+  this.matter.add.rectangle(640, 700, 1200, 40, {
+    isStatic: true
+  });
+
+  socket.on("drop", (data) => {
+    const ball = this.matter.add.circle(640, 50, 12, {
+      restitution: 0.9
     });
+
+    ball.setFillStyle(0x00ffff);
+  });
 }
 </script>
 </body>
