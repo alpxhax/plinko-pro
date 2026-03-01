@@ -5,19 +5,36 @@
   <script src="/socket.io/socket.io.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.js"></script>
 </head>
+
 <body style="margin:0;background:#0f0f1a;overflow:hidden;">
+
 <script>
 const socket = io();
 
+const WIDTH = 1280;
+const HEIGHT = 720;
+
+const ROWS = 9;                  // change difficulty here
+const PEG_SPACING = 70;
+const PEG_RADIUS = 6;
+const BALL_RADIUS = 10;
+
+const START_Y = 120;
+const CENTER_X = WIDTH / 2;
+
+const multipliers = [0, 0.5, 1, 2, 5, 10, 5, 2, 1, 0.5]; 
+// rows + 1 slots
+
 const config = {
   type: Phaser.AUTO,
-  width: 1280,
-  height: 720,
+  width: WIDTH,
+  height: HEIGHT,
   backgroundColor: "#0f0f1a",
   physics: {
-    default: 'matter',
+    default: "matter",
     matter: {
-      gravity: { y: 1 }
+      gravity: { y: 1.2 },
+      restitution: 0.9
     }
   },
   scene: {
@@ -25,45 +42,106 @@ const config = {
   }
 };
 
-const game = new Phaser.Game(config);
+new Phaser.Game(config);
 
 function create() {
 
-  // Draw pegs
-  for (let row = 0; row < 8; row++) {
-    for (let col = 0; col < 10; col++) {
+  const scene = this;
 
-      let x = 200 + col * 80 + (row % 2 === 0 ? 0 : 40);
-      let y = 150 + row * 60;
+  // ---------- SIDE WALLS ----------
+  scene.matter.add.rectangle(150, HEIGHT/2, 20, HEIGHT, { isStatic: true });
+  scene.matter.add.rectangle(WIDTH-150, HEIGHT/2, 20, HEIGHT, { isStatic: true });
 
-      // Physics body
-      this.matter.add.circle(x, y, 6, { isStatic: true });
+  scene.add.rectangle(150, HEIGHT/2, 20, HEIGHT, 0x222244);
+  scene.add.rectangle(WIDTH-150, HEIGHT/2, 20, HEIGHT, 0x222244);
 
-      // Visible circle
-      let peg = this.add.circle(x, y, 6, 0x00ffff);
-      peg.setDepth(1);
+  // ---------- TRIANGLE PEG BOARD ----------
+  for (let row = 0; row < ROWS; row++) {
+
+    let pegsInRow = row + 1;
+
+    for (let col = 0; col < pegsInRow; col++) {
+
+      let totalWidth = (pegsInRow - 1) * PEG_SPACING;
+      let startX = CENTER_X - totalWidth / 2;
+
+      let x = startX + col * PEG_SPACING;
+      let y = START_Y + row * 60;
+
+      scene.matter.add.circle(x, y, PEG_RADIUS, { isStatic: true });
+
+      scene.add.circle(x, y, PEG_RADIUS, 0x00ffff);
     }
   }
 
-  // Floor
-  this.matter.add.rectangle(640, 700, 1200, 40, { isStatic: true });
-  this.add.rectangle(640, 700, 1200, 40, 0x222244);
+  // ---------- FLOOR ----------
+  scene.matter.add.rectangle(WIDTH/2, 690, WIDTH-300, 40, { isStatic: true });
+  scene.add.rectangle(WIDTH/2, 690, WIDTH-300, 40, 0x222244);
 
-  socket.on("drop", (data) => {
+  // ---------- SLOT DIVIDERS ----------
+  const slotWidth = (PEG_SPACING);
+  const slotCount = ROWS + 1;
 
-    let ball = this.matter.add.circle(640, 50, 12, {
+  let bottomWidth = ROWS * PEG_SPACING;
+  let startSlotsX = CENTER_X - bottomWidth / 2 - slotWidth/2;
+
+  for (let i = 0; i <= slotCount; i++) {
+
+    let x = startSlotsX + i * slotWidth;
+
+    scene.matter.add.rectangle(x, 650, 5, 120, { isStatic: true });
+    scene.add.rectangle(x, 650, 5, 120, 0x444466);
+  }
+
+  // ---------- MULTIPLIER TEXT ----------
+  for (let i = 0; i < multipliers.length; i++) {
+
+    let x = startSlotsX + i * slotWidth + slotWidth/2;
+
+    scene.add.text(x - 15, 680, multipliers[i] + "x", {
+      font: "20px Arial",
+      fill: "#ffffff"
+    });
+  }
+
+  // ---------- DROP EVENT ----------
+  socket.on("drop", () => {
+
+    let bet = 10;
+
+    let ball = scene.matter.add.circle(CENTER_X, 60, BALL_RADIUS, {
       restitution: 0.9
     });
 
-    let graphics = this.add.circle(640, 50, 12, 0xff00ff);
+    let visual = scene.add.circle(CENTER_X, 60, BALL_RADIUS, 0xff00ff);
 
-    // Sync visual with physics
-    this.events.on("update", () => {
-      graphics.x = ball.position.x;
-      graphics.y = ball.position.y;
+    scene.events.on("update", function updateBall() {
+
+      visual.x = ball.position.x;
+      visual.y = ball.position.y;
+
+      if (ball.position.y > 660) {
+
+        let slotIndex = Math.floor((ball.position.x - startSlotsX) / slotWidth);
+
+        if (slotIndex >= 0 && slotIndex < multipliers.length) {
+
+          let win = bet * multipliers[slotIndex];
+
+          scene.add.text(ball.position.x - 30, 600, "WIN " + win, {
+            font: "28px Arial",
+            fill: "#00ff00"
+          });
+        }
+
+        ball.destroy();
+        visual.destroy();
+        scene.events.off("update", updateBall);
+      }
     });
   });
 }
 </script>
+
 </body>
 </html>
